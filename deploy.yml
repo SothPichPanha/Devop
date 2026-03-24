@@ -1,0 +1,18 @@
+- hosts: i4bserver
+  become: yes
+
+  tasks:
+    - name: Test connection
+      ping:
+
+    - name: Create project folder
+      file:
+        path: /var/www/sothpichpanha
+        state: directory
+
+    - name: Clone Laravel project
+      git:
+        repo: "https://github.com/SothPichPanha/Devop.git"
+        dest: /var/www/sothpichpanha
+        version: laravel
+        force: yes
