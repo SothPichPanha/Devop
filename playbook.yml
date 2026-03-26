@@ -40,6 +40,13 @@
         dest: "{{ app_path }}"
         force: yes
 
+    - name: Set proper ownership
+      file:
+        path: "{{ app_path }}"
+        owner: www-data
+        group: www-data
+        recurse: yes
+
     - name: Install Composer
       shell: |
         curl -sS https://getcomposer.org/installer | php
@@ -67,8 +74,9 @@
 
     - name: Set permissions
       shell: |
-        chmod -R 777 {{ app_path }}/storage
-        chmod -R 777 {{ app_path }}/bootstrap/cache
+        chmod -R 755 {{ app_path }}
+        chmod -R 775 {{ app_path }}/storage
+        chmod -R 775 {{ app_path }}/bootstrap/cache
       ignore_errors: yes
 
     - name: Create Nginx config
