@@ -13,6 +13,6 @@
     - name: Clone Laravel project
       git:
         repo: "https://github.com/SothPichPanha/Devop.git"
-        dest: /var/www/sothpichpanha
+        dest: /var/www/html/sothpichpanha
         version: laravel
         force: yes
