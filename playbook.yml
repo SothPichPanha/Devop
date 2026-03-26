@@ -1,18 +1,101 @@
-- hosts: i4bserver
+- name: Deploy Laravel Application
+  hosts: i4bserver
   become: yes
+  vars:
+    deploy_user: root
+    app_path: /var/www/html/sothpichpanha
+    github_repo: https://github.com/SothPichPanha/Devop.git
 
   tasks:
-    - name: Test connection
-      ping:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+      when: ansible_os_family == "Debian"
 
-    - name: Create project folder
+    - name: Install required packages
+      apt:
+        name:
+          - nginx
+          - php8.2-fpm
+          - php8.2-mysql
+          - php8.2-cli
+          - php8.2-xml
+          - php8.2-mbstring
+          - php8.2-curl
+          - php8.2-zip
+          - unzip
+          - git
+          - unzip
+        state: present
+
+    - name: Create deployment directory
       file:
-        path: /var/www/sothpichpanha
+        path: "{{ app_path }}"
         state: directory
+        mode: '0755'
 
-    - name: Clone Laravel project
+    - name: Clone Laravel repository
       git:
-        repo: "https://github.com/SothPichPanha/Devop.git"
-        dest: /var/www/html/sothpichpanha
-        version: laravel
+        repo: "{{ github_repo }}"
+        dest: "{{ app_path }}"
         force: yes
+
+    - name: Install Composer
+      shell: |
+        curl -sS https://getcomposer.org/installer | php
+        mv composer.phar /usr/local/bin/composer
+        chmod +x /usr/local/bin/composer
+
+    - name: Install PHP dependencies
+      composer:
+        working_dir: "{{ app_path }}"
+        no_dev: no
+      environment:
+        COMPOSER_ALLOW_SUPERUSER: "1"
+
+    - name: Create .env file
+      template:
+        src: .env.j2
+        dest: "{{ app_path }}/.env"
+      ignore_errors: yes
+
+    - name: Generate application key
+      shell: |
+        cd {{ app_path }}
+        php artisan key:generate --force
+      ignore_errors: yes
+
+    - name: Set permissions
+      shell: |
+        chmod -R 777 {{ app_path }}/storage
+        chmod -R 777 {{ app_path }}/bootstrap/cache
+      ignore_errors: yes
+
+    - name: Create Nginx config
+      template:
+        src: nginx.conf.j2
+        dest: /etc/nginx/sites-available/laravel
+      notify: Restart Nginx
+
+    - name: Enable Laravel site
+      file:
+        src: /etc/nginx/sites-available/laravel
+        dest: /etc/nginx/sites-enabled/laravel
+        state: link
+      notify: Restart Nginx
+
+    - name: Remove default nginx site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: Restart Nginx
+
+    - name: Test nginx configuration
+      shell: nginx -t
+      notify: Restart Nginx
+
+  handlers:
+    - name: Restart Nginx
+      service:
+        name: nginx
+        state: restarted
