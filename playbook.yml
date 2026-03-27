@@ -3,7 +3,7 @@
   become: yes
   vars:
     deploy_user: root
-    app_path: /var/www/html/sothpichpanha
+    app_path: /var/www/sothpichpanha
     github_repo: https://github.com/SothPichPanha/Devop.git
 
   tasks:
@@ -25,7 +25,6 @@
           - php8.2-zip
           - unzip
           - git
-          - unzip
         state: present
 
     - name: Create deployment directory
@@ -34,31 +33,26 @@
         state: directory
         mode: '0755'
 
+    - name: Configure git safe directory
+      shell: git config --global --add safe.directory {{ app_path }}
+      ignore_errors: yes
+
     - name: Clone Laravel repository
       git:
         repo: "{{ github_repo }}"
         dest: "{{ app_path }}"
+        version: laravel
         force: yes
-
-    - name: Set proper ownership
-      file:
-        path: "{{ app_path }}"
-        owner: www-data
-        group: www-data
-        recurse: yes
-
     - name: Install Composer
       shell: |
         curl -sS https://getcomposer.org/installer | php
         mv composer.phar /usr/local/bin/composer
         chmod +x /usr/local/bin/composer
 
-    - name: Install PHP dependencies
-      composer:
-        working_dir: "{{ app_path }}"
-        no_dev: no
-      environment:
-        COMPOSER_ALLOW_SUPERUSER: "1"
+    - name: Install Laravel dependencies
+      shell: |
+        cd {{ app_path }}
+        composer install --no-interaction --prefer-dist --optimize-autoloader
 
     - name: Create .env file
       template:
