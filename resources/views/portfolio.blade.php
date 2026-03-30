@@ -165,7 +165,7 @@
 
             {{-- Logo --}}
             <a href="#hero" class="font-serif text-xl text-gray-900 dark:text-white tracking-tight">
-                SPP<span class="text-accent">.</span>
+                zenocoder<span class="text-accent">.</span>
             </a>
 
             {{-- Desktop links --}}
