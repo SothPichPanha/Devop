@@ -1,103 +1,98 @@
 pipeline {
-    agent any
-    
+    agent { label 'Agent1' }
+
     environment {
-        APP_NAME = 'laravel-app'
-        DEPLOY_HOST = '178.128.93.188'
-        SERVER_PASSWORD = credentials('server-password')
-        EMAIL_TO = 'your-email@example.com'
+        CHAT_ID = '1080222391' 
     }
-    
+
     stages {
-        stage('Checkout') {
+        stage('Clone') {
             steps {
-                echo 'Checking out code from repository...'
-                checkout scm
+                git branch: 'laravel',
+                    url: 'https://github.com/SothPichPanha/Devop.git'
             }
         }
-        
-        stage('Environment Setup') {
+
+        stage('Build') {
             steps {
-                echo 'Setting up environment...'
                 sh '''
-                    if [ ! -f .env ]; then
-                        cp .env.example .env
-                    fi
+                composer install
+                cp .env.example .env || true
+                php artisan key:generate
                 '''
             }
         }
-        
-        stage('Install Dependencies') {
+
+        stage('Deploy') {
             steps {
-                echo 'Installing Composer dependencies...'
                 sh '''
-                    docker run --rm -v $(pwd):/app composer:latest install --ignore-platform-reqs --no-dev
-                '''
-            }
-        }
-        
-        stage('Run Tests') {
-            steps {
-                echo 'Running PHPUnit tests...'
-                sh '''
-                    docker run --rm -v $(pwd):/app -w /app php:8.2-cli php vendor/bin/phpunit || true
-                '''
-            }
-        }
-        
-        stage('Deploy with Ansible') {
-            steps {
-                echo 'Deploying application with Ansible to ${DEPLOY_HOST}...'
-                sh '''
-                    ansible-playbook -i inventory playbook.yml --extra-vars "ansible_ssh_pass=${SERVER_PASSWORD}"
-                '''
-            }
-        }
-        
-        stage('Health Check') {
-            steps {
-                echo 'Performing health check on deployed server...'
-                sh '''
-                    sleep 10
-                    curl -f http://${DEPLOY_HOST}/health || curl -f http://${DEPLOY_HOST} || exit 1
+                ansible-playbook playbook.yml -i inventory.ini
                 '''
             }
         }
     }
-    
+
     post {
+
         success {
-            echo '✅ Pipeline completed successfully!'
-            emailext(
-                subject: "✅ Jenkins Build ${env.JOB_NAME} - Success",
-                body: """
-                    <h2>Build Successful</h2>
-                    <p><b>Project:</b> ${env.JOB_NAME}</p>
-                    <p><b>Build Number:</b> ${env.BUILD_NUMBER}</p>
-                    <p><b>Build URL:</b> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
-                    <p><b>Deployed to:</b> ${env.DEPLOY_HOST}</p>
-                """,
-                to: "${EMAIL_TO}",
-                attachLog: true
-            )
+            script {
+                def msg = """
+            *Build Success*
+            
+            Job: ${env.JOB_NAME}
+            Build: #${env.BUILD_NUMBER}
+            Branch: laravel
+            Time: ${new Date().format("yyyy-MM-dd HH:mm:ss")}
+            
+            Open Build:
+            ${env.BUILD_URL}
+            """
+
+                withCredentials([string(credentialsId: 'telegram-token', variable: 'TOKEN')]) {
+                    httpRequest(
+                        url: "https://api.telegram.org/bot${TOKEN}/sendMessage",
+                        httpMode: 'POST',
+                        contentType: 'APPLICATION_FORM',
+                        requestBody: "chat_id=${CHAT_ID}&text=${msg}"
+                    )
+                }
+            }
         }
-        failure {
-            echo '❌ Pipeline failed!'
-            emailext(
-                subject: "❌ Jenkins Build ${env.JOB_NAME} - FAILED",
-                body: """
-                    <h2>Build Failed</h2>
-                    <p><b>Project:</b> ${env.JOB_NAME}</p>
-                    <p><b>Build Number:</b> ${env.BUILD_NUMBER}</p>
-                    <p><b>Build URL:</b> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
-                    <p><b>Failed Stage:</b> ${env.STAGE_NAME}</p>
-                """,
-                to: "${EMAIL_TO}",
-                attachLog: true
+
+failure {
+    script {
+        echo "FAILURE TRIGGERED"
+
+        def msg = "Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}"
+
+        withCredentials([string(credentialsId: 'telegram-token', variable: 'TOKEN')]) {
+            def res = httpRequest(
+                url: "https://api.telegram.org/bot${TOKEN}/sendMessage",
+                httpMode: 'POST',
+                contentType: 'APPLICATION_FORM',
+                requestBody: "chat_id=${CHAT_ID}&text=${msg}",
+                validResponseCodes: '100:599'
             )
+
+            echo "Status: ${res.status}"
+            echo "Response: ${res.content}"
         }
-        always {
-            echo 'Cleaning up...'
+    }
+}
+
+        unstable {
+            script {
+                def msg = "Build Unstable: ${env.JOB_NAME} #${env.BUILD_NUMBER}"
+
+                withCredentials([string(credentialsId: 'telegram-token', variable: 'TOKEN')]) {
+                    httpRequest(
+                        url: "https://api.telegram.org/bot${TOKEN}/sendMessage",
+                        httpMode: 'POST',
+                        contentType: 'APPLICATION_FORM',
+                        requestBody: "chat_id=${CHAT_ID}&text=${msg}"
+                    )
+                }
+            }
         }
     }
 }
